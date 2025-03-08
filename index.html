@@ -20,33 +20,36 @@
 	</head>
 	<body>
 		<div class="game-holder" id="gameHolder">
-			<div class="header">
-				<h1><span>the</span>Aviator</h1>
-				<h2>fly it to the end</h2>
-				<div class="score" id="score">
-					<div class="score__content" id="level">
-						<div class="score__label">level</div>
-						<div class="score__value score__value--level" id="levelValue">1</div>
-						<svg class="level-circle" id="levelCircle" viewbox="0 0 200 200">
-							<circle id="levelCircleBgr" r="80" cx="100" cy="100" fill="none" stroke="#d1b790" stroke-width="24px" />
-							<circle id="levelCircleStroke" r="80" cx="100" cy="100" fill="none" #f25346 stroke="#68c3c0" stroke-width="14px" stroke-dasharray="502" />
-						</svg>
-					</div>
-					<div class="score__content" id="dist">
-						<div class="score__label">distance</div>
-						<div class="score__value score__value--dist" id="distValue">000</div>
-					</div>
-					<div class="score__content" id="energy">
-						<div class="score__label">energy</div>
-						<div class="score__value score__value--energy" id="energyValue">
-							<div class="energy-bar" id="energyBar"></div>
+			<div id="gameContent" class="game-content">
+				<div class="header">
+					<h1><span>the</span>Aviator</h1>
+					<h2>fly it to the end</h2>
+					<div class="score" id="score">
+						<div class="score__content" id="level">
+							<div class="score__label">time</div>
+							<div class="score__value score__value--level" id="levelValue">1</div>
+							<svg class="level-circle" id="levelCircle" viewbox="0 0 200 200">
+								<circle id="levelCircleBgr" r="80" cx="100" cy="100" fill="none" stroke="#d1b790" stroke-width="24px" />
+								<circle id="levelCircleStroke" r="80" cx="100" cy="100" fill="none" #f25346 stroke="#68c3c0" stroke-width="14px" stroke-dasharray="502" />
+							</svg>
+						</div>
+						<div class="score__content" id="dist">
+							<div class="score__label">distance</div>
+							<div class="score__value score__value--dist" id="distValue">000</div>
 						</div>
 					</div>
 				</div>
+				<div class="world" id="world"></div>
+				<div class="message message--replay" id="replayMessage">Click to Replay</div>
+				<div class="message message--instructions" id="instructions">Avoid the red ones</span></div>
+				
+				<div class="plane-switcher">
+					<button class="plane-button red" onclick="switchPlane('red')" data-plane="red"></button>
+					<button class="plane-button blue" onclick="switchPlane('blue')" data-plane="blue"></button>
+					<button class="plane-button green" onclick="switchPlane('green')" data-plane="green"></button>
+					<button class="plane-button yellow" onclick="switchPlane('yellow')" data-plane="yellow"></button>
+				</div>
 			</div>
-			<div class="world" id="world"></div>
-			<div class="message message--replay" id="replayMessage">Click to Replay</div>
-			<div class="message message--instructions" id="instructions">Grab the blue pills<span>avoid the red ones</span></div>
 		</div>
 		<!-- Demo links -->
 		<nav class="meta">

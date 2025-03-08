@@ -1,4 +1,7 @@
-//COLORS
+// Thêm biến để lưu loại máy bay được chọn
+var selectedPlaneType = 'red';
+
+// Thêm các màu sắc mới
 var Colors = {
     red:0xf25346,
     white:0xd8d0d1,
@@ -7,7 +10,7 @@ var Colors = {
     pink:0xF5986E,
     yellow:0xf4ce93,
     blue:0x68c3c0,
-
+    green:0x7ec850
 };
 
 ///////////////
@@ -167,6 +170,15 @@ function handleMouseUp(event){
   }
 }
 
+// Thêm hàm xử lý phím
+function handleKeyPress(event) {
+    if (event.key.toLowerCase() === 'q' && game.status === "playing") {
+        const planeTypes = ['red', 'blue', 'green', 'yellow'];
+        const currentIndex = planeTypes.indexOf(selectedPlaneType);
+        const nextIndex = (currentIndex + 1) % planeTypes.length;
+        switchPlane(planeTypes[nextIndex]);
+    }
+}
 
 function handleTouchEnd(event){
   if (game.status == "waitingReplay"){
@@ -303,7 +315,7 @@ var AirPlane = function(){
   // Cabin
 
   var geomCabin = new THREE.BoxGeometry(80,50,50,1,1,1);
-  var matCabin = new THREE.MeshPhongMaterial({color:Colors.red, shading:THREE.FlatShading});
+  var matCabin = new THREE.MeshPhongMaterial({color:this.getPlaneColor(), shading:THREE.FlatShading});
 
   geomCabin.vertices[4].y-=10;
   geomCabin.vertices[4].z+=20;
@@ -332,7 +344,7 @@ var AirPlane = function(){
   // Tail Plane
 
   var geomTailPlane = new THREE.BoxGeometry(15,20,5,1,1,1);
-  var matTailPlane = new THREE.MeshPhongMaterial({color:Colors.red, shading:THREE.FlatShading});
+  var matTailPlane = new THREE.MeshPhongMaterial({color:this.getPlaneColor(), shading:THREE.FlatShading});
   var tailPlane = new THREE.Mesh(geomTailPlane, matTailPlane);
   tailPlane.position.set(-40,20,0);
   tailPlane.castShadow = true;
@@ -342,7 +354,7 @@ var AirPlane = function(){
   // Wings
 
   var geomSideWing = new THREE.BoxGeometry(30,5,120,1,1,1);
-  var matSideWing = new THREE.MeshPhongMaterial({color:Colors.red, shading:THREE.FlatShading});
+  var matSideWing = new THREE.MeshPhongMaterial({color:this.getPlaneColor(), shading:THREE.FlatShading});
   var sideWing = new THREE.Mesh(geomSideWing, matSideWing);
   sideWing.position.set(0,15,0);
   sideWing.castShadow = true;
@@ -394,7 +406,7 @@ var AirPlane = function(){
   this.mesh.add(this.propeller);
 
   var wheelProtecGeom = new THREE.BoxGeometry(30,15,10,1,1,1);
-  var wheelProtecMat = new THREE.MeshPhongMaterial({color:Colors.red, shading:THREE.FlatShading});
+  var wheelProtecMat = new THREE.MeshPhongMaterial({color:this.getPlaneColor(), shading:THREE.FlatShading});
   var wheelProtecR = new THREE.Mesh(wheelProtecGeom,wheelProtecMat);
   wheelProtecR.position.set(25,-20,25);
   this.mesh.add(wheelProtecR);
@@ -426,7 +438,7 @@ var AirPlane = function(){
 
   var suspensionGeom = new THREE.BoxGeometry(4,20,4);
   suspensionGeom.applyMatrix(new THREE.Matrix4().makeTranslation(0,10,0))
-  var suspensionMat = new THREE.MeshPhongMaterial({color:Colors.red, shading:THREE.FlatShading});
+  var suspensionMat = new THREE.MeshPhongMaterial({color:this.getPlaneColor(), shading:THREE.FlatShading});
   var suspension = new THREE.Mesh(suspensionGeom,suspensionMat);
   suspension.position.set(-35,-5,0);
   suspension.rotation.z = -.3;
@@ -440,6 +452,33 @@ var AirPlane = function(){
   this.mesh.castShadow = true;
   this.mesh.receiveShadow = true;
 
+  // Thêm các thuộc tính đặc biệt cho từng loại máy bay
+  switch(selectedPlaneType) {
+      case 'red':
+          this.mesh.scale.set(.25,.25,.25);
+          game.planeSpeed = 1;
+          game.planeMinSpeed = 1.2;
+          game.planeMaxSpeed = 1.6;
+          break;
+      case 'blue':
+          this.mesh.scale.set(.3,.3,.3);
+          game.planeSpeed = 1.2;
+          game.planeMinSpeed = 1.4;
+          game.planeMaxSpeed = 1.8;
+          break;
+      case 'green':
+          this.mesh.scale.set(.2,.2,.2);
+          game.planeSpeed = 1.4;
+          game.planeMinSpeed = 1.6;
+          game.planeMaxSpeed = 2.0;
+          break;
+      case 'yellow':
+          this.mesh.scale.set(.35,.35,.35);
+          game.planeSpeed = 0.8;
+          game.planeMinSpeed = 1.0;
+          game.planeMaxSpeed = 1.4;
+          break;
+  }
 };
 
 Sky = function(){
@@ -957,32 +996,82 @@ function normalize(v,vmin,vmax,tmin, tmax){
 var fieldDistance, energyBar, replayMessage, fieldLevel, levelCircle;
 
 function init(event){
+    // UI
+    fieldDistance = document.getElementById("distValue");
+    replayMessage = document.getElementById("replayMessage");
+    fieldLevel = document.getElementById("levelValue");
+    levelCircle = document.getElementById("levelCircleStroke");
 
-  // UI
+    resetGame();
+    createScene();
 
-  fieldDistance = document.getElementById("distValue");
-  energyBar = document.getElementById("energyBar");
-  replayMessage = document.getElementById("replayMessage");
-  fieldLevel = document.getElementById("levelValue");
-  levelCircle = document.getElementById("levelCircleStroke");
+    createLights();
+    createPlane();
+    createSea();
+    createSky();
+    createCoins();
+    createEnnemies();
+    createParticles();
 
-  resetGame();
-  createScene();
+    document.addEventListener('mousemove', handleMouseMove, false);
+    document.addEventListener('touchmove', handleTouchMove, false);
+    document.addEventListener('mouseup', handleMouseUp, false);
+    document.addEventListener('touchend', handleTouchEnd, false);
+    document.addEventListener('keypress', handleKeyPress, false);
 
-  createLights();
-  createPlane();
-  createSea();
-  createSky();
-  createCoins();
-  createEnnemies();
-  createParticles();
+    // Thiết lập trạng thái active cho nút máy bay đầu tiên
+    document.querySelector(`.plane-button[data-plane="${selectedPlaneType}"]`).classList.add('active');
 
-  document.addEventListener('mousemove', handleMouseMove, false);
-  document.addEventListener('touchmove', handleTouchMove, false);
-  document.addEventListener('mouseup', handleMouseUp, false);
-  document.addEventListener('touchend', handleTouchEnd, false);
-
-  loop();
+    loop();
 }
 
 window.addEventListener('load', init, false);
+
+// Thêm method để lấy màu máy bay
+AirPlane.prototype.getPlaneColor = function() {
+    switch(selectedPlaneType) {
+        case 'red': return Colors.red;
+        case 'blue': return Colors.blue;
+        case 'green': return Colors.green;
+        case 'yellow': return Colors.yellow;
+        default: return Colors.red;
+    }
+};
+
+// Thêm hàm chuyển đổi máy bay trong game
+function switchPlane(type) {
+    if (game.status !== "playing") return; // Chỉ cho phép đổi khi đang chơi
+    
+    selectedPlaneType = type;
+    
+    // Cập nhật giao diện nút
+    document.querySelectorAll('.plane-button').forEach(button => {
+        button.classList.remove('active');
+    });
+    document.querySelector(`.plane-button[data-plane="${type}"]`).classList.add('active');
+    
+    // Lưu vị trí và hướng hiện tại của máy bay
+    var currentPos = {
+        x: airplane.mesh.position.x,
+        y: airplane.mesh.position.y,
+        z: airplane.mesh.position.z
+    };
+    var currentRot = {
+        x: airplane.mesh.rotation.x,
+        y: airplane.mesh.rotation.y,
+        z: airplane.mesh.rotation.z
+    };
+    
+    // Xóa máy bay cũ
+    scene.remove(airplane.mesh);
+    
+    // Tạo máy bay mới
+    airplane = new AirPlane();
+    
+    // Khôi phục vị trí và hướng
+    airplane.mesh.position.set(currentPos.x, currentPos.y, currentPos.z);
+    airplane.mesh.rotation.set(currentRot.x, currentRot.y, currentRot.z);
+    
+    // Thêm vào scene
+    scene.add(airplane.mesh);
+}
