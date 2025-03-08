@@ -11,7 +11,30 @@ var Colors = {
   pink: 0xF5986E,
   yellow: 0xf4ce93,
   blue: 0x68c3c0,
-  green: 0x7ec850
+  green: 0x7ec850,
+  red: 0xff0000,
+  silver: 0xc0c0c0,
+  black: 0x000000,
+  gold: 0xffd700,
+  navy: 0x000080,
+  crimson: 0xdc143c,
+  teal: 0x008080,
+  maroon: 0x800000,
+  olive: 0x808000,
+  indigo: 0x4b0082,
+  // Add gradient colors
+  gradientBlue: {
+    top: 0x00bfff,
+    bottom: 0x0000ff
+  },
+  gradientRed: {
+    top: 0xff6b6b,
+    bottom: 0xff0000
+  },
+  gradientGold: {
+    top: 0xffd700,
+    bottom: 0xffa500
+  }
 };
 
 ///////////////
@@ -24,6 +47,14 @@ var oldTime = new Date().getTime();
 var ennemiesPool = [];
 var particlesPool = [];
 var particlesInUse = [];
+
+// Add variable for available planes
+var availablePlanes = [];
+var allPlaneTypes = [
+  'orange', 'blue', 'green', 'yellow', 'purple',
+  'stealth', 'biplane', 'seaplane', 'vtol', 'glider',
+  'drone', 'jet', 'cargo', 'supersonic', 'spyplane'
+];
 
 function resetGame() {
   game = {
@@ -75,7 +106,10 @@ function resetGame() {
     ennemyValue: 10,
     ennemiesSpeed: .6,
     ennemyLastSpawn: 0,
-    distanceForEnnemiesSpawn: 50,
+    distanceForEnnemiesSpawn: 10,
+    initialEnnemiesCount: 12,
+    maxEnemiesAtOnce: 15,
+    baseEnemySpawnCount: 3,
 
     gameStartTime: new Date().getTime(),
     difficultyFactor: 1,
@@ -88,15 +122,15 @@ function resetGame() {
 //THREEJS RELATED VARIABLES
 
 var scene,
-  camera, fieldOfView, aspectRatio, nearPlane, farPlane,
-  renderer,
-  container,
-  controls;
+    camera, fieldOfView, aspectRatio, nearPlane, farPlane,
+    renderer,
+    container,
+    controls;
 
 //SCREEN & MOUSE VARIABLES
 
 var HEIGHT, WIDTH,
-  mousePos = { x: 0, y: 0 };
+    mousePos = { x: 0, y: 0 };
 
 //INIT THREE JS, SCREEN AND MOUSE EVENTS
 
@@ -115,7 +149,7 @@ function createScene() {
     aspectRatio,
     nearPlane,
     farPlane
-  );
+    );
   scene.fog = new THREE.Fog(0xf7d9aa, 100, 950);
   camera.position.x = 0;
   camera.position.z = 200;
@@ -159,7 +193,7 @@ function handleMouseMove(event) {
 }
 
 function handleTouchMove(event) {
-  event.preventDefault();
+    event.preventDefault();
   var tx = -1 + (event.touches[0].pageX / WIDTH) * 2;
   var ty = 1 - (event.touches[0].pageY / HEIGHT) * 2;
   mousePos = { x: tx, y: ty };
@@ -175,10 +209,14 @@ function handleMouseUp(event) {
 // Thêm hàm xử lý phím
 function handleKeyPress(event) {
   if (event.key.toLowerCase() === 'q' && game.status === "playing") {
-    const planeTypes = ['orange', 'blue', 'green', 'yellow', 'purple'];
-    const currentIndex = planeTypes.indexOf(selectedPlaneType);
-    const nextIndex = (currentIndex + 1) % planeTypes.length;
-    switchPlane(planeTypes[nextIndex]);
+    const currentIndex = availablePlanes.indexOf(selectedPlaneType);
+    const nextIndex = (currentIndex + 1) % availablePlanes.length;
+    selectedPlaneType = availablePlanes[nextIndex];
+    switchPlane(availablePlanes[nextIndex]);
+  } else if (event.key.toLowerCase() === 'r' && game.status === "playing") {
+    // Press R to get new random selection of planes
+    selectRandomPlanes();
+    switchPlane(selectedPlaneType);
   }
 }
 
@@ -299,13 +337,13 @@ var Pilot = function () {
 
 Pilot.prototype.updateHairs = function () {
   //*
-  var hairs = this.hairsTop.children;
+   var hairs = this.hairsTop.children;
 
-  var l = hairs.length;
+   var l = hairs.length;
   for (var i = 0; i < l; i++) {
-    var h = hairs[i];
+      var h = hairs[i];
     h.scale.y = .75 + Math.cos(this.angleHairs + i / 3) * .25;
-  }
+   }
   this.angleHairs += game.speed * deltaTime * 40;
   //*/
 }
@@ -314,239 +352,172 @@ var AirPlane = function () {
   this.mesh = new THREE.Object3D();
   this.mesh.name = "airPlane";
 
+  // Initialize propeller
+  this.propeller = new THREE.Object3D();
+
   // Cabin
   var geomCabin;
+  var matCabin;
+  
   switch (selectedPlaneType) {
-    case 'orange':
-      // F-22 Raptor - Tiêm kích hiện đại
-      geomCabin = new THREE.BoxGeometry(120, 20, 35, 1, 1, 1);
+    case 'orange': // F-22 Raptor - Low poly jet fighter
+      geomCabin = new THREE.BoxGeometry(80, 15, 30, 1, 1, 1);
+      // Create angular nose
       geomCabin.vertices[4].y -= 2;
-      geomCabin.vertices[4].z += 10;
       geomCabin.vertices[5].y -= 2;
-      geomCabin.vertices[5].z -= 10;
-      geomCabin.vertices[6].y += 5;
-      geomCabin.vertices[6].z += 10;
-      geomCabin.vertices[7].y += 5;
-      geomCabin.vertices[7].z -= 10;
+      geomCabin.vertices[4].x += 15;
+      geomCabin.vertices[5].x += 15;
+      
+      // Create twin engines
+      var geomEngine = new THREE.BoxGeometry(20, 10, 10);
+      var engine1 = new THREE.Mesh(geomEngine, matCabin);
+      var engine2 = engine1.clone();
+      engine1.position.set(0, -5, 15);
+      engine2.position.set(0, -5, -15);
+      this.mesh.add(engine1);
+      this.mesh.add(engine2);
       break;
-    case 'blue':
-      // Apache Helicopter - Trực thăng tấn công
-      geomCabin = new THREE.BoxGeometry(70, 40, 40, 1, 1, 1);
+
+    case 'blue': // Apache - Low poly helicopter
+      geomCabin = new THREE.BoxGeometry(50, 20, 20, 1, 1, 1);
+      
+      // Main rotor
+      var geomRotor = new THREE.BoxGeometry(5, 2, 100);
+      var rotor = new THREE.Mesh(geomRotor, matCabin);
+      rotor.position.y = 20;
+      this.propeller.add(rotor);
+      
+      // Tail rotor
+      var geomTailRotor = new THREE.BoxGeometry(20, 2, 2);
+      var tailRotor = new THREE.Mesh(geomTailRotor, matCabin);
+      tailRotor.position.set(-30, 10, 0);
+      tailRotor.rotation.y = Math.PI/2;
+      this.propeller.add(tailRotor);
+      break;
+
+    case 'biplane': // Classic biplane with propeller
+      geomCabin = new THREE.BoxGeometry(40, 15, 15, 1, 1, 1);
+      
+      // Propeller
+      var geomPropeller = new THREE.BoxGeometry(5, 30, 2);
+      var propeller = new THREE.Mesh(geomPropeller, matCabin);
+      propeller.position.set(25, 0, 0);
+      this.propeller.add(propeller);
+      
+      // Double wings
+      var geomWing = new THREE.BoxGeometry(20, 3, 60);
+      var topWing = new THREE.Mesh(geomWing, matCabin);
+      var bottomWing = topWing.clone();
+      topWing.position.y = 12;
+      bottomWing.position.y = -5;
+      this.mesh.add(topWing);
+      this.mesh.add(bottomWing);
+      break;
+
+    case 'seaplane': // Seaplane with floats and propeller
+      geomCabin = new THREE.BoxGeometry(50, 20, 20, 1, 1, 1);
+      
+      // Propeller
+      var geomPropeller = new THREE.BoxGeometry(5, 30, 2);
+      var propeller = new THREE.Mesh(geomPropeller, matCabin);
+      propeller.position.set(30, 0, 0);
+      this.propeller.add(propeller);
+      
+      // Floats
+      var geomFloat = new THREE.BoxGeometry(40, 5, 8);
+      var float1 = new THREE.Mesh(geomFloat, matCabin);
+      var float2 = float1.clone();
+      float1.position.set(0, -15, 15);
+      float2.position.set(0, -15, -15);
+      this.mesh.add(float1);
+      this.mesh.add(float2);
+      break;
+
+    case 'cargo': // Large cargo plane with propellers
+      geomCabin = new THREE.BoxGeometry(100, 35, 35, 1, 1, 1);
+      
+      // Four propellers
+      var geomPropeller = new THREE.BoxGeometry(5, 25, 2);
+      for(var i = 0; i < 4; i++) {
+        var prop = new THREE.Mesh(geomPropeller, matCabin);
+        prop.position.set(i < 2 ? -20 : 20, 0, i%2 === 0 ? 20 : -20);
+        this.propeller.add(prop);
+      }
+      break;
+
+    case 'vtol': // VTOL aircraft with tiltable propellers
+      geomCabin = new THREE.BoxGeometry(60, 20, 20, 1, 1, 1);
+      
+      // Tilt rotors
+      var geomRotor = new THREE.BoxGeometry(5, 30, 2);
+      var rotor1 = new THREE.Mesh(geomRotor, matCabin);
+      var rotor2 = rotor1.clone();
+      rotor1.position.set(0, 15, 15);
+      rotor2.position.set(0, 15, -15);
+      this.propeller.add(rotor1);
+      this.propeller.add(rotor2);
+      break;
+
+    case 'drone': // Small drone with quad rotors
+      geomCabin = new THREE.BoxGeometry(30, 5, 30, 1, 1, 1);
+      
+      // Four rotors
+      var geomRotor = new THREE.BoxGeometry(2, 20, 2);
+      for(var i = 0; i < 4; i++) {
+        var rotor = new THREE.Mesh(geomRotor, matCabin);
+        rotor.position.set(i < 2 ? -10 : 10, 5, i%2 === 0 ? 10 : -10);
+        this.propeller.add(rotor);
+      }
+      break;
+
+    default: // Default low-poly aircraft
+      geomCabin = new THREE.BoxGeometry(60, 20, 20, 1, 1, 1);
       geomCabin.vertices[4].y -= 5;
-      geomCabin.vertices[4].z += 15;
       geomCabin.vertices[5].y -= 5;
-      geomCabin.vertices[5].z -= 15;
-      geomCabin.vertices[6].y += 10;
-      geomCabin.vertices[6].z += 15;
-      geomCabin.vertices[7].y += 10;
-      geomCabin.vertices[7].z -= 15;
-      break;
-    case 'green':
-      // UFO - Đĩa bay
-      geomCabin = new THREE.BoxGeometry(50, 15, 50, 1, 1, 1);
-      for (var i = 0; i < 8; i++) {
-        if (i < 4) {
-          geomCabin.vertices[i].y -= 5;
-        } else {
-          geomCabin.vertices[i].y += 2;
-        }
-      }
-      break;
-    case 'yellow':
-      // B-2 Spirit - Máy bay ném bom tàng hình
-      geomCabin = new THREE.BoxGeometry(100, 10, 120, 1, 1, 1);
-      for (var i = 0; i < 8; i++) {
-        if (i < 4) {
-          geomCabin.vertices[i].y -= 2;
-        }
-      }
-      break;
-    case 'purple':
-      // V-22 Osprey - Máy bay cánh xoay
-      geomCabin = new THREE.BoxGeometry(90, 30, 30, 1, 1, 1);
-      geomCabin.vertices[4].y -= 8;
-      geomCabin.vertices[4].z += 12;
-      geomCabin.vertices[5].y -= 8;
-      geomCabin.vertices[5].z -= 12;
-      geomCabin.vertices[6].y += 15;
-      geomCabin.vertices[6].z += 12;
-      geomCabin.vertices[7].y += 15;
-      geomCabin.vertices[7].z -= 12;
-      break;
+      geomCabin.vertices[4].x += 10;
+      geomCabin.vertices[5].x += 10;
   }
 
-  var matCabin = new THREE.MeshPhongMaterial({ color: this.getPlaneColor(), shading: THREE.FlatShading });
+  // Create cabin
   var cabin = new THREE.Mesh(geomCabin, matCabin);
   cabin.castShadow = true;
   cabin.receiveShadow = true;
   this.mesh.add(cabin);
 
-  // Engine/Rotors
-  var geomEngine;
-  this.propeller = new THREE.Object3D(); // Initialize propeller as empty Object3D by default
-  
-  switch (selectedPlaneType) {
-    case 'orange':
-      // F-22 Twin Engines
-      geomEngine = new THREE.BoxGeometry(20, 15, 15, 1, 1, 1);
-      var engine = new THREE.Mesh(geomEngine, new THREE.MeshPhongMaterial({ color: Colors.white, shading: THREE.FlatShading }));
-      engine.position.x = 50;
-      engine.position.z = 15;
-      var engine2 = engine.clone();
-      engine2.position.z = -15;
-      this.mesh.add(engine);
-      this.mesh.add(engine2);
-      this.mesh.add(this.propeller); // Add empty propeller
-      break;
-    case 'blue':
-      // Apache Main Rotor
-      geomEngine = new THREE.BoxGeometry(5, 10, 100, 1, 1, 1);
-      var rotor = new THREE.Mesh(geomEngine, new THREE.MeshPhongMaterial({ color: Colors.white, shading: THREE.FlatShading }));
-      rotor.position.y = 25;
-      this.propeller.add(rotor);
-      this.mesh.add(this.propeller);
-      break;
-    case 'green':
-      // UFO Glow
-      geomEngine = new THREE.BoxGeometry(40, 5, 40, 1, 1, 1);
-      var glow = new THREE.Mesh(geomEngine, new THREE.MeshPhongMaterial({ color: Colors.white, transparent: true, opacity: 0.5, shading: THREE.FlatShading }));
-      glow.position.y = -5;
-      this.propeller.add(glow);
-      this.mesh.add(this.propeller);
-      break;
-    case 'yellow':
-      // B-2 Engines
-      geomEngine = new THREE.BoxGeometry(20, 5, 20, 1, 1, 1);
-      var engine = new THREE.Mesh(geomEngine, new THREE.MeshPhongMaterial({ color: Colors.white, shading: THREE.FlatShading }));
-      engine.position.x = -30;
-      engine.position.z = 40;
-      var engine2 = engine.clone();
-      engine2.position.z = -40;
-      this.mesh.add(engine);
-      this.mesh.add(engine2);
-      this.mesh.add(this.propeller); // Add empty propeller
-      break;
-    case 'purple':
-      // Osprey Rotors
-      geomEngine = new THREE.BoxGeometry(5, 10, 80, 1, 1, 1);
-      var rotorLeft = new THREE.Mesh(geomEngine, new THREE.MeshPhongMaterial({ color: Colors.white, shading: THREE.FlatShading }));
-      rotorLeft.position.set(30, 20, 40);
-      var rotorRight = rotorLeft.clone();
-      rotorRight.position.z = -40;
-      this.propeller.add(rotorLeft);
-      this.propeller.add(rotorRight);
-      this.mesh.add(this.propeller);
-      break;
-  }
-
-  // Wings
-  var geomWing;
-  switch (selectedPlaneType) {
-    case 'orange':
-      // F-22 Delta Wings
-      geomWing = new THREE.BoxGeometry(40, 5, 130, 1, 1, 1);
-      for (var i = 0; i < 8; i++) {
-        if (i < 4) geomWing.vertices[i].x -= 20;
-      }
-      break;
-    case 'blue':
-      // Apache Wings (Stub Wings)
-      geomWing = new THREE.BoxGeometry(30, 3, 60, 1, 1, 1);
-      break;
-    case 'green':
-      // UFO no traditional wings
-      return;
-    case 'yellow':
-      // B-2 Flying Wing
-      geomWing = new THREE.BoxGeometry(100, 3, 200, 1, 1, 1);
-      for (var i = 0; i < 8; i++) {
-        if (i < 4) geomWing.vertices[i].x -= 30;
-      }
-      break;
-    case 'purple':
-      // Osprey Wings
-      geomWing = new THREE.BoxGeometry(30, 3, 100, 1, 1, 1);
-      break;
-  }
-
-  if (geomWing) {
-    var matWing = new THREE.MeshPhongMaterial({ color: this.getPlaneColor(), shading: THREE.FlatShading });
-    var wing = new THREE.Mesh(geomWing, matWing);
-    wing.position.set(0, 15, 0);
+  // Add wings for most aircraft types (except drone)
+  if (selectedPlaneType !== 'drone') {
+    var geomWing = new THREE.BoxGeometry(40, 3, 100);
+    var wing = new THREE.Mesh(geomWing, matCabin);
+    wing.position.set(0, 5, 0);
     wing.castShadow = true;
     wing.receiveShadow = true;
     this.mesh.add(wing);
   }
 
-  // Tail
-  var geomTail;
-  switch (selectedPlaneType) {
-    case 'orange':
-      // F-22 Twin Tails
-      geomTail = new THREE.BoxGeometry(15, 25, 5, 1, 1, 1);
-      var tail1 = new THREE.Mesh(geomTail, matCabin);
-      tail1.position.set(-40, 15, 15);
-      tail1.rotation.z = Math.PI * 0.1;
-      var tail2 = tail1.clone();
-      tail2.position.z = -15;
-      this.mesh.add(tail1);
-      this.mesh.add(tail2);
-      break;
-    case 'blue':
-      // Apache Tail Rotor
-      geomTail = new THREE.BoxGeometry(40, 3, 3, 1, 1, 1);
-      var tailRotor = new THREE.Mesh(geomTail, matCabin);
-      tailRotor.position.set(-45, 10, 0);
-      this.mesh.add(tailRotor);
-      break;
-    case 'yellow':
-      // B-2 No Vertical Tail
-      break;
-    case 'purple':
-      // Osprey Tail
-      geomTail = new THREE.BoxGeometry(20, 20, 5, 1, 1, 1);
-      var tail = new THREE.Mesh(geomTail, matCabin);
-      tail.position.set(-45, 10, 0);
-      this.mesh.add(tail);
-      break;
+  // Add tail for most aircraft types (except drone and UFO)
+  if (selectedPlaneType !== 'drone' && selectedPlaneType !== 'green') {
+    var geomTail = new THREE.BoxGeometry(20, 15, 5);
+    var tail = new THREE.Mesh(geomTail, matCabin);
+    tail.position.set(-30, 10, 0);
+    tail.castShadow = true;
+    tail.receiveShadow = true;
+    this.mesh.add(tail);
   }
 
-  // Thêm các thuộc tính đặc biệt cho từng loại máy bay
-  switch (selectedPlaneType) {
-    case 'orange': // F-22 Raptor
-      this.mesh.scale.set(.25, .25, .25);
-      game.planeSpeed = 1.4;
-      game.planeMinSpeed = 1.6;
-      game.planeMaxSpeed = 2.0;
-      break;
-    case 'blue': // Apache Helicopter
-      this.mesh.scale.set(.3, .3, .3);
-      game.planeSpeed = 0.9;
-      game.planeMinSpeed = 1.1;
-      game.planeMaxSpeed = 1.5;
-      break;
-    case 'green': // UFO
-      this.mesh.scale.set(.2, .2, .2);
-      game.planeSpeed = 1.6;
-      game.planeMinSpeed = 1.8;
-      game.planeMaxSpeed = 2.2;
-      break;
-    case 'yellow': // B-2 Spirit
-      this.mesh.scale.set(.35, .35, .35);
-      game.planeSpeed = 0.8;
-      game.planeMinSpeed = 1.0;
-      game.planeMaxSpeed = 1.4;
-      break;
-    case 'purple': // V-22 Osprey
-      this.mesh.scale.set(.28, .28, .28);
-      game.planeSpeed = 1.1;
-      game.planeMinSpeed = 1.3;
-      game.planeMaxSpeed = 1.7;
-      break;
-  }
+  // Add propeller to mesh
+  this.mesh.add(this.propeller);
 
-  // Add pilot
+  // Create pilot
   this.pilot = new Pilot();
+  this.updatePilotPosition();
+  this.mesh.add(this.pilot.mesh);
+
+  this.mesh.castShadow = true;
+  this.mesh.receiveShadow = true;
+};
+
+// Add method to update pilot position
+AirPlane.prototype.updatePilotPosition = function() {
   switch(selectedPlaneType) {
     case 'orange': // F-22 Raptor
       this.pilot.mesh.position.set(-10, 27, 0);
@@ -563,11 +534,39 @@ var AirPlane = function () {
     case 'purple': // V-22 Osprey
       this.pilot.mesh.position.set(-15, 27, 0);
       break;
+    case 'stealth':
+      this.pilot.mesh.position.set(-15, 25, 0);
+      break;
+    case 'biplane':
+      this.pilot.mesh.position.set(-8, 28, 0);
+      break;
+    case 'seaplane':
+      this.pilot.mesh.position.set(-12, 30, 0);
+      break;
+    case 'vtol':
+      this.pilot.mesh.position.set(-10, 32, 0);
+      break;
+    case 'glider':
+      this.pilot.mesh.position.set(-15, 22, 0);
+      break;
+    case 'drone':
+      this.pilot.mesh.position.set(-8, 20, 0);
+      break;
+    case 'jet':
+      this.pilot.mesh.position.set(-20, 28, 0);
+      break;
+    case 'cargo':
+      this.pilot.mesh.position.set(-25, 35, 0);
+      break;
+    case 'supersonic':
+      this.pilot.mesh.position.set(-30, 25, 0);
+      break;
+    case 'spyplane':
+      this.pilot.mesh.position.set(-18, 23, 0);
+      break;
+    default:
+      this.pilot.mesh.position.set(-10, 27, 0);
   }
-  this.mesh.add(this.pilot.mesh);
-
-  this.mesh.castShadow = true;
-  this.mesh.receiveShadow = true;
 };
 
 Sky = function () {
@@ -617,7 +616,7 @@ Sea = function () {
       ang: Math.random() * Math.PI * 2,
       amp: game.wavesMinAmp + Math.random() * (game.wavesMaxAmp - game.wavesMinAmp),
       speed: game.wavesMinSpeed + Math.random() * (game.wavesMaxSpeed - game.wavesMinSpeed)
-    });
+                    });
   };
   var mat = new THREE.MeshPhongMaterial({
     color: Colors.blue,
@@ -703,8 +702,12 @@ EnnemiesHolder = function () {
 }
 
 EnnemiesHolder.prototype.spawnEnnemies = function () {
-  var nEnnemies = 1;
-
+  // Calculate number of enemies based on game time
+  var playTime = (new Date().getTime() - game.gameStartTime) / 1000;
+  var timeBonus = Math.floor(playTime / 15); // Every 15 seconds increase spawn count (changed from 30)
+  var nEnnemies = game.baseEnemySpawnCount + timeBonus;
+  nEnnemies = Math.min(nEnnemies, game.maxEnemiesAtOnce); // Cap at maximum
+  
   for (var i = 0; i < nEnnemies; i++) {
     var ennemy;
     if (ennemiesPool.length) {
@@ -713,8 +716,36 @@ EnnemiesHolder.prototype.spawnEnnemies = function () {
       ennemy = new Ennemy();
     }
 
-    ennemy.angle = - (i * 0.1);
-    ennemy.distance = game.seaRadius + game.planeDefaultHeight + (-1 + Math.random() * 2) * (game.planeAmpHeight - 20);
+    // Increase sea enemy probability over time
+    var seaEnemyChance = 0.4 + (timeBonus * 0.08); // Increases by 8% every 15 seconds (increased from 5%)
+    seaEnemyChance = Math.min(seaEnemyChance, 0.7); // Cap at 70% chance (increased from 60%)
+    
+    var isSeaEnemy = Math.random() < seaEnemyChance;
+    
+    if (isSeaEnemy) {
+      // Sea enemy - starts below sea level and moves up
+      ennemy.angle = - (i * 0.1);
+      ennemy.distance = game.seaRadius - 50 - Math.random() * 100;
+      ennemy.mesh.material.color = new THREE.Color(Colors.blue);
+      ennemy.mesh.scale.set(1.5, 1.5, 1.5);
+    } else {
+      // Air enemy - now with varying heights
+      ennemy.angle = - (i * 0.1);
+      var heightVariation = Math.random(); // Random height variation
+      if (heightVariation < 0.4) {
+        // Low altitude
+        ennemy.distance = game.seaRadius + 50 + Math.random() * 50;
+      } else if (heightVariation < 0.7) {
+        // Medium altitude
+        ennemy.distance = game.seaRadius + game.planeDefaultHeight + (-1 + Math.random() * 2) * (game.planeAmpHeight - 20);
+      } else {
+        // High altitude
+        ennemy.distance = game.seaRadius + game.planeDefaultHeight + game.planeAmpHeight + Math.random() * 50;
+      }
+      ennemy.mesh.material.color = new THREE.Color(Colors.red);
+      ennemy.mesh.scale.set(1, 1, 1);
+    }
+
     ennemy.mesh.position.y = -game.seaRadius + Math.sin(ennemy.angle) * ennemy.distance;
     ennemy.mesh.position.x = Math.cos(ennemy.angle) * ennemy.distance;
 
@@ -730,7 +761,15 @@ EnnemiesHolder.prototype.rotateEnnemies = function () {
 
     if (ennemy.angle > Math.PI * 2) ennemy.angle -= Math.PI * 2;
 
-    ennemy.mesh.position.y = -game.seaRadius + Math.sin(ennemy.angle) * ennemy.distance;
+    // Add vertical movement for sea enemies
+    if (ennemy.mesh.material.color.getHex() === Colors.blue) {
+      // Sea enemies move up and down
+      var verticalMovement = Math.sin(ennemy.angle * 3) * 50;
+      ennemy.mesh.position.y = -game.seaRadius + Math.sin(ennemy.angle) * ennemy.distance + verticalMovement;
+    } else {
+      ennemy.mesh.position.y = -game.seaRadius + Math.sin(ennemy.angle) * ennemy.distance;
+    }
+    
     ennemy.mesh.position.x = Math.cos(ennemy.angle) * ennemy.distance;
     ennemy.mesh.rotation.z += Math.random() * .1;
     ennemy.mesh.rotation.y += Math.random() * .1;
@@ -738,7 +777,7 @@ EnnemiesHolder.prototype.rotateEnnemies = function () {
     var diffPos = airplane.mesh.position.clone().sub(ennemy.mesh.position.clone());
     var d = diffPos.length();
     if (d < game.ennemyDistanceTolerance) {
-      particlesHolder.spawnParticles(ennemy.mesh.position.clone(), 15, Colors.red, 3);
+      particlesHolder.spawnParticles(ennemy.mesh.position.clone(), 15, ennemy.mesh.material.color.getHex(), 3);
 
       ennemiesPool.unshift(this.ennemiesInUse.splice(i, 1)[0]);
       this.mesh.remove(ennemy.mesh);
@@ -746,7 +785,6 @@ EnnemiesHolder.prototype.rotateEnnemies = function () {
       game.planeCollisionSpeedY = 100 * diffPos.y / d;
       ambientLight.intensity = 2;
 
-      // Kết thúc game ngay khi va chạm với enemy
       game.status = "gameover";
       i--;
     } else if (ennemy.angle > Math.PI) {
@@ -916,13 +954,56 @@ function createCoins() {
 }
 
 function createEnnemies() {
-  for (var i = 0; i < 10; i++) {
+  // Increase pool size to handle more enemies
+  for (var i = 0; i < 30; i++) {
     var ennemy = new Ennemy();
     ennemiesPool.push(ennemy);
   }
   ennemiesHolder = new EnnemiesHolder();
-  //ennemiesHolder.mesh.position.y = -game.seaRadius;
-  scene.add(ennemiesHolder.mesh)
+  scene.add(ennemiesHolder.mesh);
+
+  // Spawn initial enemies in different positions
+  for (var i = 0; i < game.initialEnnemiesCount; i++) {
+    spawnInitialEnemies();
+  }
+}
+
+// New function to spawn initial enemies in different positions
+function spawnInitialEnemies() {
+  var ennemy;
+  if (ennemiesPool.length) {
+    ennemy = ennemiesPool.pop();
+  } else {
+    ennemy = new Ennemy();
+  }
+
+  // Randomize enemy type and position
+  var position = Math.random();
+  
+  if (position < 0.4) { // Sea enemy
+    ennemy.angle = Math.random() * Math.PI * 2;
+    ennemy.distance = game.seaRadius - 50 - Math.random() * 100;
+    ennemy.mesh.material.color = new THREE.Color(Colors.blue);
+    ennemy.mesh.scale.set(1.5, 1.5, 1.5);
+  } else if (position < 0.7) { // Low altitude enemy
+    ennemy.angle = Math.random() * Math.PI * 2;
+    ennemy.distance = game.seaRadius + 50 + Math.random() * 50;
+    ennemy.mesh.material.color = new THREE.Color(Colors.red);
+    ennemy.mesh.scale.set(1, 1, 1);
+  } else { // High altitude enemy
+    ennemy.angle = Math.random() * Math.PI * 2;
+    ennemy.distance = game.seaRadius + game.planeDefaultHeight + Math.random() * game.planeAmpHeight;
+    ennemy.mesh.material.color = new THREE.Color(Colors.red);
+    ennemy.mesh.scale.set(0.8, 0.8, 0.8);
+  }
+
+  // Set initial position
+  ennemy.mesh.position.y = -game.seaRadius + Math.sin(ennemy.angle) * ennemy.distance;
+  ennemy.mesh.position.x = Math.cos(ennemy.angle) * ennemy.distance;
+
+  // Add to scene
+  ennemiesHolder.mesh.add(ennemy.mesh);
+  ennemiesHolder.ennemiesInUse.push(ennemy);
 }
 
 function createParticles() {
@@ -936,26 +1017,25 @@ function createParticles() {
 }
 
 function updateDifficulty() {
-  // Tính toán thời gian đã chơi (tính bằng giây)
   var currentTime = new Date().getTime();
   var playTime = (currentTime - game.gameStartTime) / 1000;
 
-  // Hiển thị thời gian sống sót
   fieldLevel.innerHTML = Math.floor(playTime) + "s";
 
-  // Tăng độ khó theo thời gian
-  game.difficultyFactor = 1 + (playTime / 30);
-
-  // Cập nhật tốc độ game
+  // Dynamic difficulty scaling
+  game.difficultyFactor = 1 + Math.log(1 + playTime / 20);
   game.targetBaseSpeed = game.initSpeed * game.difficultyFactor;
 
-  // Cập nhật tốc độ enemies và coins
-  game.ennemiesSpeed = 0.6 * game.difficultyFactor;
-  game.coinsSpeed = 0.5 * game.difficultyFactor;
-
-  // Giảm khoảng cách spawn của enemies và coins theo độ khó
-  game.distanceForEnnemiesSpawn = Math.max(30, 50 / game.difficultyFactor);
-  game.distanceForCoinsSpawn = Math.max(50, 100 / game.difficultyFactor);
+  // Adaptive enemy speed and spawn rate
+  var baseSpawnInterval = Math.max(2, 10 - Math.floor(playTime / 30));
+  game.distanceForEnnemiesSpawn = baseSpawnInterval;
+  
+  // Dynamic enemy speed
+  game.ennemiesSpeed = Math.min(2.5, 0.6 + (playTime / 60));
+  
+  // Adjust spawn counts based on time
+  game.baseEnemySpawnCount = Math.min(5, 2 + Math.floor(playTime / 45));
+  game.maxEnemiesAtOnce = Math.min(20, 12 + Math.floor(playTime / 30));
 }
 
 function loop() {
@@ -1107,9 +1187,6 @@ function init(event) {
   document.addEventListener('touchend', handleTouchEnd, false);
   document.addEventListener('keypress', handleKeyPress, false);
 
-  // Thiết lập trạng thái active cho nút máy bay đầu tiên
-  document.querySelector(`.plane-button[data-plane="${selectedPlaneType}"]`).classList.add('active');
-
   loop();
 }
 
@@ -1123,23 +1200,27 @@ AirPlane.prototype.getPlaneColor = function () {
     case 'green': return Colors.green;
     case 'yellow': return Colors.yellow;
     case 'purple': return Colors.purple;
+    case 'stealth': return Colors.black;
+    case 'biplane': return Colors.red;
+    case 'seaplane': return Colors.silver;
+    case 'vtol': return Colors.navy;
+    case 'glider': return Colors.white;
+    case 'drone': return Colors.olive;
+    case 'jet': return Colors.gold;
+    case 'cargo': return Colors.maroon;
+    case 'supersonic': return Colors.crimson;
+    case 'spyplane': return Colors.teal;
     default: return Colors.orange;
   }
 };
 
 // Thêm hàm chuyển đổi máy bay trong game
 function switchPlane(type) {
-  if (game.status !== "playing") return; // Chỉ cho phép đổi khi đang chơi
+  if (game.status !== "playing") return;
 
   selectedPlaneType = type;
 
-  // Cập nhật giao diện nút
-  document.querySelectorAll('.plane-button').forEach(button => {
-    button.classList.remove('active');
-  });
-  document.querySelector(`.plane-button[data-plane="${type}"]`).classList.add('active');
-
-  // Lưu vị trí và hướng hiện tại của máy bay
+  // Store current position and rotation
   var currentPos = {
     x: airplane.mesh.position.x,
     y: airplane.mesh.position.y,
@@ -1151,43 +1232,128 @@ function switchPlane(type) {
     z: airplane.mesh.rotation.z
   };
 
-  // Lưu pilot hiện tại
+  // Store current pilot
   var currentPilot = airplane.pilot;
 
-  // Xóa máy bay cũ
+  // Remove old airplane
   scene.remove(airplane.mesh);
 
-  // Tạo máy bay mới
+  // Create new airplane
   airplane = new AirPlane();
 
-  // Khôi phục vị trí và hướng
+  // Restore position and rotation
   airplane.mesh.position.set(currentPos.x, currentPos.y, currentPos.z);
   airplane.mesh.rotation.set(currentRot.x, currentRot.y, currentRot.z);
 
-  // Khôi phục pilot
-  if (currentPilot) {
-    airplane.pilot = currentPilot;
-    // Cập nhật vị trí pilot dựa trên loại máy bay mới
-    switch(type) {
-      case 'orange': // F-22 Raptor
-        airplane.pilot.mesh.position.set(-10, 27, 0);
-        break;
-      case 'blue': // Apache Helicopter
-        airplane.pilot.mesh.position.set(-5, 30, 0);
-        break;
-      case 'green': // UFO
-        airplane.pilot.mesh.position.set(0, 15, 0);
-        break;
-      case 'yellow': // B-2 Spirit
-        airplane.pilot.mesh.position.set(-20, 25, 0);
-        break;
-      case 'purple': // V-22 Osprey
-        airplane.pilot.mesh.position.set(-15, 27, 0);
-        break;
-    }
-    airplane.mesh.add(airplane.pilot.mesh);
+  // Update scale and speed based on plane type
+  switch(type) {
+    case 'orange': // F-22 Raptor
+      airplane.mesh.scale.set(.25, .25, .25);
+      game.planeSpeed = 1.4;
+      game.planeMinSpeed = 1.6;
+      game.planeMaxSpeed = 2.0;
+      break;
+    case 'blue': // Apache Helicopter
+      airplane.mesh.scale.set(.3, .3, .3);
+      game.planeSpeed = 0.9;
+      game.planeMinSpeed = 1.1;
+      game.planeMaxSpeed = 1.5;
+      break;
+    case 'green': // UFO
+      airplane.mesh.scale.set(.2, .2, .2);
+      game.planeSpeed = 1.6;
+      game.planeMinSpeed = 1.8;
+      game.planeMaxSpeed = 2.2;
+      break;
+    case 'yellow': // B-2 Spirit
+      airplane.mesh.scale.set(.35, .35, .35);
+      game.planeSpeed = 0.8;
+      game.planeMinSpeed = 1.0;
+      game.planeMaxSpeed = 1.4;
+      break;
+    case 'purple': // V-22 Osprey
+      airplane.mesh.scale.set(.28, .28, .28);
+      game.planeSpeed = 1.1;
+      game.planeMinSpeed = 1.3;
+      game.planeMaxSpeed = 1.7;
+      break;
+    case 'stealth':
+      airplane.mesh.scale.set(.25, .25, .25);
+      game.planeSpeed = 1.5;
+      game.planeMinSpeed = 1.7;
+      game.planeMaxSpeed = 2.1;
+      break;
+    case 'biplane':
+      airplane.mesh.scale.set(.3, .3, .3);
+      game.planeSpeed = 0.8;
+      game.planeMinSpeed = 1.0;
+      game.planeMaxSpeed = 1.4;
+      break;
+    case 'seaplane':
+      airplane.mesh.scale.set(.32, .32, .32);
+      game.planeSpeed = 0.9;
+      game.planeMinSpeed = 1.1;
+      game.planeMaxSpeed = 1.5;
+      break;
+    case 'vtol':
+      airplane.mesh.scale.set(.28, .28, .28);
+      game.planeSpeed = 1.2;
+      game.planeMinSpeed = 1.4;
+      game.planeMaxSpeed = 1.8;
+      break;
+    case 'glider':
+      airplane.mesh.scale.set(.27, .27, .27);
+      game.planeSpeed = 0.7;
+      game.planeMinSpeed = 0.9;
+      game.planeMaxSpeed = 1.3;
+      break;
+    case 'drone':
+      airplane.mesh.scale.set(.22, .22, .22);
+      game.planeSpeed = 1.6;
+      game.planeMinSpeed = 1.8;
+      game.planeMaxSpeed = 2.2;
+      break;
+    case 'jet':
+      airplane.mesh.scale.set(.3, .3, .3);
+      game.planeSpeed = 1.3;
+      game.planeMinSpeed = 1.5;
+      game.planeMaxSpeed = 1.9;
+      break;
+    case 'cargo':
+      airplane.mesh.scale.set(.4, .4, .4);
+      game.planeSpeed = 0.6;
+      game.planeMinSpeed = 0.8;
+      game.planeMaxSpeed = 1.2;
+      break;
+    case 'supersonic':
+      airplane.mesh.scale.set(.26, .26, .26);
+      game.planeSpeed = 1.8;
+      game.planeMinSpeed = 2.0;
+      game.planeMaxSpeed = 2.4;
+      break;
+    case 'spyplane':
+      airplane.mesh.scale.set(.24, .24, .24);
+      game.planeSpeed = 1.4;
+      game.planeMinSpeed = 1.6;
+      game.planeMaxSpeed = 2.0;
+      break;
   }
 
-  // Thêm vào scene
+  // Add to scene
   scene.add(airplane.mesh);
+}
+
+// Function to shuffle array
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+// Function to select random planes
+function selectRandomPlanes() {
+  availablePlanes = shuffleArray([...allPlaneTypes]).slice(0, 5);
+  selectedPlaneType = availablePlanes[0];
 }
