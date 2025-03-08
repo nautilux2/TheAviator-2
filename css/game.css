@@ -94,15 +94,6 @@
 	font-size: 30px;
 }
 
-.level-circle {
-	position: absolute;
-	left: 50%;
-	width: 46px;
-	margin: -37px 0 0 -23px;
-	-webkit-transform: rotate(-90deg);
-	transform: rotate(-90deg);
-}
-
 .message {
 	font-weight: bold;
 	position: absolute;
@@ -191,8 +182,8 @@
 	box-shadow: 0 0 10px rgba(255,255,255,0.5);
 }
 
-.plane-button.red {
-	background-color: #f25346;
+.plane-button.orange {
+	background-color: #ff7f27;
 }
 
 .plane-button.blue {
@@ -205,6 +196,10 @@
 
 .plane-button.yellow {
 	background-color: #f4ce93;
+}
+
+.plane-button.purple {
+	background-color: #9b59b6;
 }
 
 .game-content {
