@@ -26,19 +26,12 @@ function resetGame(){
           initSpeed:.00035,
           baseSpeed:.00035,
           targetBaseSpeed:.00035,
-          incrementSpeedByTime:.0000025,
-          incrementSpeedByLevel:.000005,
-          distanceForSpeedUpdate:100,
+          incrementSpeedByTime:.000005,
+          distanceForSpeedUpdate:50,
           speedLastUpdate:0,
 
           distance:0,
           ratioSpeedDistance:50,
-          energy:100,
-          ratioSpeedEnergy:3,
-
-          level:1,
-          levelLastUpdate:0,
-          distanceForLevelUpdate:1000,
 
           planeDefaultHeight:100,
           planeAmpHeight:80,
@@ -58,7 +51,6 @@ function resetGame(){
 
           seaRadius:600,
           seaLength:800,
-          //seaRotationSpeed:0.006,
           wavesMinAmp : 5,
           wavesMaxAmp : 20,
           wavesMinSpeed : 0.001,
@@ -80,9 +72,12 @@ function resetGame(){
           ennemyLastSpawn:0,
           distanceForEnnemiesSpawn:50,
 
+          gameStartTime: new Date().getTime(),
+          difficultyFactor: 1,
+
           status : "playing",
          };
-  fieldLevel.innerHTML = Math.floor(game.level);
+  fieldLevel.innerHTML = "1";
 }
 
 //THREEJS RELATED VARIABLES
@@ -579,7 +574,7 @@ EnnemiesHolder = function (){
 }
 
 EnnemiesHolder.prototype.spawnEnnemies = function(){
-  var nEnnemies = game.level;
+  var nEnnemies = 1;
 
   for (var i=0; i<nEnnemies; i++){
     var ennemy;
@@ -611,7 +606,6 @@ EnnemiesHolder.prototype.rotateEnnemies = function(){
     ennemy.mesh.rotation.z += Math.random()*.1;
     ennemy.mesh.rotation.y += Math.random()*.1;
 
-    //var globalEnnemyPosition =  ennemy.mesh.localToWorld(new THREE.Vector3());
     var diffPos = airplane.mesh.position.clone().sub(ennemy.mesh.position.clone());
     var d = diffPos.length();
     if (d<game.ennemyDistanceTolerance){
@@ -623,7 +617,8 @@ EnnemiesHolder.prototype.rotateEnnemies = function(){
       game.planeCollisionSpeedY = 100 * diffPos.y / d;
       ambientLight.intensity = 2;
 
-      removeEnergy();
+      // Kết thúc game ngay khi va chạm với enemy
+      game.status = "gameover";
       i--;
     }else if (ennemy.angle > Math.PI){
       ennemiesPool.unshift(this.ennemiesInUse.splice(i,1)[0]);
@@ -750,7 +745,6 @@ CoinsHolder.prototype.rotateCoins = function(){
       this.coinsPool.unshift(this.coinsInUse.splice(i,1)[0]);
       this.mesh.remove(coin.mesh);
       particlesHolder.spawnParticles(coin.mesh.position.clone(), 5, 0x009999, .8);
-      addEnergy();
       i--;
     }else if (coin.angle > Math.PI){
       this.coinsPool.unshift(this.coinsInUse.splice(i,1)[0]);
@@ -810,6 +804,29 @@ function createParticles(){
   scene.add(particlesHolder.mesh)
 }
 
+function updateDifficulty(){
+  // Tính toán thời gian đã chơi (tính bằng giây)
+  var currentTime = new Date().getTime();
+  var playTime = (currentTime - game.gameStartTime) / 1000;
+  
+  // Hiển thị thời gian sống sót
+  fieldLevel.innerHTML = Math.floor(playTime) + "s";
+  
+  // Tăng độ khó theo thời gian
+  game.difficultyFactor = 1 + (playTime / 30);
+  
+  // Cập nhật tốc độ game
+  game.targetBaseSpeed = game.initSpeed * game.difficultyFactor;
+  
+  // Cập nhật tốc độ enemies và coins
+  game.ennemiesSpeed = 0.6 * game.difficultyFactor;
+  game.coinsSpeed = 0.5 * game.difficultyFactor;
+  
+  // Giảm khoảng cách spawn của enemies và coins theo độ khó
+  game.distanceForEnnemiesSpawn = Math.max(30, 50 / game.difficultyFactor);
+  game.distanceForCoinsSpawn = Math.max(50, 100 / game.difficultyFactor);
+}
+
 function loop(){
 
   newTime = new Date().getTime();
@@ -818,7 +835,10 @@ function loop(){
 
   if (game.status=="playing"){
 
-    // Add energy coins every 100m;
+    // Cập nhật độ khó
+    updateDifficulty();
+
+    // Add coins every 100m;
     if (Math.floor(game.distance)%game.distanceForCoinsSpawn == 0 && Math.floor(game.distance) > game.coinLastSpawn){
       game.coinLastSpawn = Math.floor(game.distance);
       coinsHolder.spawnCoins();
@@ -835,20 +855,14 @@ function loop(){
       ennemiesHolder.spawnEnnemies();
     }
 
-    if (Math.floor(game.distance)%game.distanceForLevelUpdate == 0 && Math.floor(game.distance) > game.levelLastUpdate){
-      game.levelLastUpdate = Math.floor(game.distance);
-      game.level++;
-      fieldLevel.innerHTML = Math.floor(game.level);
-
-      game.targetBaseSpeed = game.initSpeed + game.incrementSpeedByLevel*game.level
-    }
-
-
     updatePlane();
     updateDistance();
-    updateEnergy();
     game.baseSpeed += (game.targetBaseSpeed - game.baseSpeed) * deltaTime * 0.02;
     game.speed = game.baseSpeed * game.planeSpeed;
+
+    // Add sea waves
+    sea.mesh.rotation.z += .005;
+    sea.mesh.rotation.x += .005;
 
   }else if(game.status=="gameover"){
     game.speed *= .99;
@@ -891,37 +905,6 @@ function updateDistance(){
   levelCircle.setAttribute("stroke-dashoffset", d);
 
 }
-
-var blinkEnergy=false;
-
-function updateEnergy(){
-  game.energy -= game.speed*deltaTime*game.ratioSpeedEnergy;
-  game.energy = Math.max(0, game.energy);
-  energyBar.style.right = (100-game.energy)+"%";
-  energyBar.style.backgroundColor = (game.energy<50)? "#f25346" : "#68c3c0";
-
-  if (game.energy<30){
-    energyBar.style.animationName = "blinking";
-  }else{
-    energyBar.style.animationName = "none";
-  }
-
-  if (game.energy <1){
-    game.status = "gameover";
-  }
-}
-
-function addEnergy(){
-  game.energy += game.coinValue;
-  game.energy = Math.min(game.energy, 100);
-}
-
-function removeEnergy(){
-  game.energy -= game.ennemyValue;
-  game.energy = Math.max(0, game.energy);
-}
-
-
 
 function updatePlane(){
 
